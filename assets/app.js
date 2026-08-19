@@ -76,6 +76,7 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function attr(s) { return esc(s).replace(/'/g, '&#39;'); }
+  function sq(s) { return attr(String(s).replace(/'/g, "\\'")); }
   function md(s) {
     return esc(s)
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
@@ -823,16 +824,286 @@
       '<p class="muted" style="margin:0;font-size:.9rem">Mở một tài liệu hoặc buổi học bất kỳ rồi bấm <b>Ctrl/Cmd + P</b> — trang đã có sẵn CSS in ấn, phần menu sẽ tự ẩn.</p></div>';
   }
 
-  /* ================= PHÁT ÂM (IPA) ================= */
+  /* ================= BỘ MÁY PHÁT ÂM ================= */
+  var SP = { voices: [], voice: null, rate: state.rate || 0.9, showAll: false };
+
+  /* Nhận diện giọng theo tên — dùng để lọc và xếp hạng */
+  var V_FEMALE = /(samantha|karen|moira|tessa|fiona|serena|ava|allison|susan|victoria|kate|zoe|joelle|nicky|catherine|sara|zira|aria|jenny|sonia|libby|michelle|amber|clara|emily|isabella|natasha|olivia|hazel|female|nữ)/i;
+  var V_MALE   = /(daniel|alex|tom|oliver|arthur|rishi|david|guy|ryan|mark|evan|nathan|aaron|gordon|james|william|liam|brian|christopher|eric|roger|male)/i;
+  /* Giọng hiệu ứng hoặc chất lượng thấp — ẩn đi cho đỡ rối */
+  var V_BAD = /(bahh|bells|boing|bubbles|cellos|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|fred|kathy|junior|ralph|princess|bruce|agnes|deranged|hysterical|good news|bad news|pipe|eloquence|grandma|grandpa|reed|rocko|sandy|shelley|flo|eddy|bubbles)/i;
+  var V_GOOD = /(premium|enhanced|neural|natural|siri|google|microsoft|samantha|daniel|karen|moira|serena|ava|zoe|evan|nathan|joelle|tessa|fiona|arthur|oliver)/i;
+
+  var LANG_LABEL = {
+    'en-GB': 'Anh — Anh', 'en-US': 'Anh — Mỹ', 'en-AU': 'Anh — Úc',
+    'en-IE': 'Anh — Ireland', 'en-CA': 'Anh — Canada', 'en-NZ': 'Anh — New Zealand',
+    'en-IN': 'Anh — Ấn Độ', 'en-ZA': 'Anh — Nam Phi'
+  };
+  function langLabel(l) {
+    var k = String(l).replace('_', '-');
+    return LANG_LABEL[k] || LANG_LABEL[k.slice(0, 5)] || k;
+  }
+  function voiceGender(n) {
+    return V_FEMALE.test(n) ? 'nữ' : (V_MALE.test(n) ? 'nam' : '');
+  }
+  function voiceScore(v) {
+    var n = v.name, sc = 0;
+    if (/premium|enhanced|neural|natural/i.test(n)) sc += 60;
+    if (/^google/i.test(n)) sc += 40;
+    if (/^microsoft/i.test(n)) sc += 25;
+    if (V_GOOD.test(n)) sc += 20;
+    if (V_FEMALE.test(n)) sc += 6;
+    if (/en[-_]GB/i.test(v.lang)) sc += 8;
+    else if (/en[-_]US/i.test(v.lang)) sc += 6;
+    else sc += 2;
+    if (v.localService === false) sc += 5;
+    if (V_BAD.test(n)) sc -= 200;
+    return sc;
+  }
+
+  function loadVoices() {
+    if (!('speechSynthesis' in window)) return;
+    var raw = window.speechSynthesis.getVoices().filter(function (v) {
+      return /^en([-_]|$)/i.test(v.lang);
+    });
+    raw.forEach(function (v) { v._sc = voiceScore(v); });
+    SP.voices = raw.sort(function (a, b) { return b._sc - a._sc; });
+
+    if (state.voiceName) {
+      SP.voice = SP.voices.filter(function (v) { return v.name === state.voiceName; })[0] || null;
+    }
+    if (!SP.voice) SP.voice = SP.voices.filter(function (v) { return v._sc > 0; })[0] || SP.voices[0] || null;
+    fillVoiceSelect();
+  }
+
+  function fillVoiceSelect() {
+    var sel = $('#voiceSel'); if (!sel || !SP.voices.length) return;
+    var list = SP.showAll ? SP.voices : SP.voices.filter(function (v) { return v._sc > 0; });
+    if (!list.length) list = SP.voices;
+
+    var groups = {}, order = [];
+    list.forEach(function (v) {
+      var g = langLabel(v.lang);
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(v);
+    });
+    var best = list[0];
+    sel.innerHTML = order.map(function (g) {
+      return '<optgroup label="' + attr(g) + '">' + groups[g].map(function (v) {
+        var gd = voiceGender(v.name);
+        return '<option value="' + attr(v.name) + '"' +
+          (SP.voice && v.name === SP.voice.name ? ' selected' : '') + '>' +
+          (v === best ? '★ ' : '') + esc(v.name) +
+          (gd ? ' · ' + gd : '') +
+          (/premium|enhanced|neural/i.test(v.name) ? ' · chất lượng cao' : '') +
+          '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+    var hint = $('#voiceHint');
+    if (hint) {
+      var gd = SP.voice ? voiceGender(SP.voice.name) : '';
+      hint.textContent = SP.voice
+        ? 'Đang dùng: ' + SP.voice.name + (gd ? ' (giọng ' + gd + ')' : '') + ' · ' + langLabel(SP.voice.lang)
+        : '';
+    }
+  }
+
+  if ('speechSynthesis' in window) {
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  function say(text, opts) {
+    if (!('speechSynthesis' in window)) return null;
+    opts = opts || {};
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(String(text));
+    u.rate = opts.rate || SP.rate;
+    u.lang = (SP.voice && SP.voice.lang) || 'en-US';
+    if (SP.voice) u.voice = SP.voice;
+    if (opts.onend) u.onend = opts.onend;
+    window.speechSynthesis.speak(u);
+    return u;
+  }
+  speak = function (t) { say(t); };
+  window.__speak = speak;
+  window.__sayslow = function (t) { say(t, { rate: 0.55 }); };
+
+  /* ---- trình phát tự động (nghe → nghỉ → nhắc lại → tiếp) ---- */
+  var drill = { items: [], i: 0, on: false, tid: null, repeat: true };
+
+  function drillStop() {
+    drill.on = false;
+    if (drill.tid) { clearTimeout(drill.tid); drill.tid = null; }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    $$('.drill-active').forEach(function (n) { n.classList.remove('drill-active'); });
+    var b = $('#drillBtn');
+    if (b) b.innerHTML = ic('play') + 'Luyện tự động';
+    var s = $('#drillStat'); if (s) s.textContent = '';
+  }
+  function drillStep() {
+    if (!drill.on) return;
+    if (drill.i >= drill.items.length) { drillStop(); return; }
+    var it = drill.items[drill.i];
+    $$('.drill-active').forEach(function (n) { n.classList.remove('drill-active'); });
+    if (it.el) {
+      it.el.classList.add('drill-active');
+      it.el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    var st = $('#drillStat');
+    if (st) st.textContent = (drill.i + 1) + ' / ' + drill.items.length;
+    say(it.text, {
+      onend: function () {
+        if (!drill.on) return;
+        var gap = drill.repeat ? Math.max(1200, String(it.text).length * 62) : 450;
+        drill.tid = setTimeout(function () { drill.i++; drillStep(); }, gap);
+      }
+    });
+  }
+  function drillStart(selector) {
+    var nodes = $$(selector);
+    if (!nodes.length) return;
+    drill.items = nodes.map(function (n) { return { text: n.dataset.say || n.textContent, el: n }; });
+    drill.i = 0; drill.on = true;
+    var b = $('#drillBtn');
+    if (b) b.innerHTML = ic('rotate') + 'Dừng lại';
+    drillStep();
+  }
+
+  /* ---- ghi âm so sánh ---- */
+  var rec = { mr: null, chunks: [], url: null };
+  function recSupported() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  }
+  function recToggle() {
+    var btn = $('#recBtn'), out = $('#recOut');
+    if (!recSupported()) { out.innerHTML = '<span class="muted">Trình duyệt này không hỗ trợ ghi âm.</span>'; return; }
+    if (rec.mr && rec.mr.state === 'recording') { rec.mr.stop(); return; }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      rec.chunks = [];
+      rec.mr = new MediaRecorder(stream);
+      rec.mr.ondataavailable = function (e) { if (e.data.size) rec.chunks.push(e.data); };
+      rec.mr.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        if (rec.url) URL.revokeObjectURL(rec.url);
+        rec.url = URL.createObjectURL(new Blob(rec.chunks, { type: 'audio/webm' }));
+        out.innerHTML = '<audio controls src="' + rec.url + '"></audio>' +
+          '<span class="muted" style="font-size:.82rem">Nghe lại bản thu và so với giọng mẫu.</span>';
+        btn.classList.remove('rec-on');
+        btn.innerHTML = ic('mic') + 'Ghi âm lại';
+      };
+      rec.mr.start();
+      btn.classList.add('rec-on');
+      btn.innerHTML = ic('info') + 'Đang ghi — bấm để dừng';
+      out.innerHTML = '<span class="muted">Đang ghi âm…</span>';
+    }).catch(function () {
+      out.innerHTML = '<span class="muted">Không truy cập được micro. Hãy cho phép quyền micro trong trình duyệt.</span>';
+    });
+  }
+
+  /* ---- thanh điều khiển dùng chung ---- */
+  function pronBar() {
+    var noTTS = !('speechSynthesis' in window);
+    return '<div class="pron-bar">' +
+      '<div class="pb-group pb-voice"><span class="pb-lab">' + ic('volume', 'ic ic-sm') + 'Giọng đọc</span>' +
+      (noTTS ? '<span class="muted">Trình duyệt không hỗ trợ đọc</span>'
+             : '<select id="voiceSel" class="pb-sel"></select>' +
+               '<button class="btn sm" id="voiceTest">' + ic('play') + 'Nghe thử</button>' +
+               '<label class="pb-check"><input type="checkbox" id="voiceAll"> hiện tất cả giọng</label>') +
+      '<span class="pb-hint" id="voiceHint"></span></div>' +
+      '<div class="pb-group"><span class="pb-lab">' + ic('clock', 'ic ic-sm') + 'Tốc độ</span>' +
+      '<div class="pb-rates">' +
+      [['0.5', 'Rất chậm'], ['0.7', 'Chậm'], ['0.9', 'Vừa'], ['1', 'Thường']].map(function (r) {
+        return '<button class="pb-rate' + (SP.rate == r[0] ? ' active' : '') + '" data-rate="' + r[0] + '">' + r[1] + '</button>';
+      }).join('') + '</div></div>' +
+      '<div class="pb-group pb-drill">' +
+      '<button class="btn sm" id="drillBtn">' + ic('play') + 'Luyện tự động</button>' +
+      '<span class="pb-lab" id="drillStat"></span>' +
+      '<label class="pb-check"><input type="checkbox" id="drillRepeat" checked> chừa chỗ nhắc lại</label>' +
+      '</div>' +
+      '<div class="voice-tip">' +
+      '<b>Muốn giọng hay hơn?</b> Trên máy Mac, vào <b>System Settings → Accessibility → Spoken Content → System Voice → Manage Voices</b>, ' +
+      'tải các giọng có chữ <b>Premium</b> hoặc <b>Enhanced</b> — ví dụ <b>Ava</b>, <b>Zoe</b>, <b>Serena</b> (nữ) hay <b>Evan</b>, <b>Oliver</b> (nam). ' +
+      'Tải xong thì tải lại trang, giọng mới sẽ hiện trong danh sách và được đánh dấu ★. ' +
+      'Dùng trình duyệt Chrome cũng có thêm bộ giọng <b>Google UK English Female</b> chất lượng tốt.' +
+      '</div></div>';
+  }
+  function wireBar(drillSelector) {
+    var sel = $('#voiceSel');
+    if (sel) {
+      loadVoices();
+      sel.onchange = function () {
+        SP.voice = SP.voices.filter(function (v) { return v.name === sel.value; })[0] || null;
+        state.voiceName = sel.value; save();
+        fillVoiceSelect();
+        say('Hello. This is how I sound. Listen carefully to the ending sounds.');
+      };
+      var vt = $('#voiceTest');
+      if (vt) vt.onclick = function () {
+        say('Hello. This is how I sound. Listen carefully to the ending sounds.');
+      };
+      var va = $('#voiceAll');
+      if (va) va.onchange = function () { SP.showAll = va.checked; fillVoiceSelect(); };
+    }
+    $$('.pb-rate').forEach(function (b) {
+      b.onclick = function () {
+        $$('.pb-rate').forEach(function (x) { x.classList.remove('active'); });
+        b.classList.add('active');
+        SP.rate = parseFloat(b.dataset.rate);
+        state.rate = SP.rate; save();
+      };
+    });
+    var rp = $('#drillRepeat');
+    if (rp) rp.onchange = function () { drill.repeat = rp.checked; };
+    var db = $('#drillBtn');
+    if (db) db.onclick = function () { drill.on ? drillStop() : drillStart(drillSelector); };
+  }
+  function recBox(sample) {
+    if (!recSupported()) return '';
+    return '<div class="rec-box"><div class="rec-head">' + ic('mic') + '<b>Ghi âm và so sánh</b></div>' +
+      '<p class="muted" style="font-size:.85rem;margin:6px 0 10px">Nghe giọng mẫu, đọc theo, ghi âm rồi nghe lại. ' +
+      'Đây là cách nhanh nhất để tự phát hiện lỗi của mình.</p>' +
+      '<div class="btn-row" style="margin:0">' +
+      (sample ? '<button class="btn sm" onclick="__speak(&#39;' + sq(sample) + '&#39;)">' + ic('volume') + 'Nghe mẫu</button>' : '') +
+      '<button class="btn sm" id="recBtn">' + ic('mic') + 'Bắt đầu ghi âm</button></div>' +
+      '<div class="rec-out" id="recOut"></div></div>';
+  }
+
+  /* ================= TRANG PHÁT ÂM ================= */
+  function sayBtns(text) {
+    return '<span class="say-btns">' +
+      '<button class="say" title="Nghe" onclick="event.stopPropagation();__speak(&#39;' + sq(text) + '&#39;)">' +
+      ic('volume', 'ic ic-solo') + '</button>' +
+      '<button class="say say-slow" title="Nghe chậm" onclick="event.stopPropagation();__sayslow(&#39;' + sq(text) + '&#39;)">' +
+      ic('clock', 'ic ic-solo') + '</button></span>';
+  }
+
   function soundCard(x) {
-    var w = x.words.join(', ');
+    var d = PR.detail[x.ipa] || {};
+    var all = x.words.concat(d.more || []);
     return '<div class="snd' + (x.hard ? ' snd-hard' : '') + (x.star ? ' snd-star' : '') + '" ' +
-      'onclick="__speak(&#39;' + attr(x.words.join('. ')) + '&#39;)">' +
-      '<div class="snd-top"><b class="snd-ipa">' + esc(x.ipa) + '</b>' +
-      '<span class="speak">' + ic('volume', 'ic ic-solo') + '</span></div>' +
-      '<div class="snd-words">' + esc(w) + '</div>' +
+      'data-ipa="' + attr(x.ipa) + '" data-say="' + attr(all.slice(0, 6).join('. ')) + '">' +
+      '<div class="snd-top"><b class="snd-ipa">' + esc(x.ipa) + '</b>' + sayBtns(x.words.join('. ')) + '</div>' +
+      '<div class="snd-words">' + esc(x.words.join(', ')) + '</div>' +
       '<div class="snd-vi">' + md(x.vi) + '</div>' +
-      (x.pair ? '<div class="snd-pair">cặp với ' + esc(x.pair) + '</div>' : '') + '</div>';
+      '<button class="snd-more">' + ic('right', 'ic ic-sm') + 'Xem chi tiết</button>' +
+      '<div class="snd-detail"></div></div>';
+  }
+  function soundDetailHtml(ipa) {
+    var d = PR.detail[ipa]; if (!d) return '';
+    var h = '<div class="sd"><div class="sd-row"><b>' + ic('mic', 'ic ic-sm') + 'Khẩu hình</b><p>' + esc(d.mouth) + '</p></div>';
+    if (d.err) h += '<div class="sd-row sd-err"><b>' + ic('info', 'ic ic-sm') + 'Lỗi người Việt hay mắc</b><p>' + md(d.err) + '</p></div>';
+    if (d.more) {
+      h += '<div class="sd-row"><b>' + ic('list', 'ic ic-sm') + 'Từ luyện thêm</b><div class="wrap-chips">' +
+        d.more.map(function (w) {
+          return '<button class="wchip" data-say="' + attr(w) + '" onclick="__speak(&#39;' + sq(w) + '&#39;)">' + esc(w) + '</button>';
+        }).join('') + '</div></div>';
+    }
+    if (d.sent) {
+      h += '<div class="sd-row"><b>' + ic('chat', 'ic ic-sm') + 'Câu luyện</b>' +
+        '<div class="sent-line"><span>' + esc(d.sent) + '</span>' + sayBtns(d.sent) + '</div></div>';
+    }
+    return h + '</div>';
   }
   function soundGroups(groups) {
     return groups.map(function (g) {
@@ -842,148 +1113,355 @@
         '<div class="snd-grid">' + g.items.map(soundCard).join('') + '</div></section>';
     }).join('');
   }
+  function wireSounds() {
+    $$('.snd-more').forEach(function (b) {
+      b.onclick = function (e) {
+        e.stopPropagation();
+        var card = b.parentNode, box = $('.snd-detail', card);
+        if (card.classList.contains('open')) { card.classList.remove('open'); box.innerHTML = ''; return; }
+        box.innerHTML = soundDetailHtml(card.dataset.ipa);
+        card.classList.add('open');
+      };
+    });
+  }
+
+  /* ---- kho từ vựng để luyện đọc ---- */
+  function allWords() {
+    var out = [];
+    lessonList().forEach(function (ls) {
+      (ls.vocab || []).forEach(function (v) { out.push({ v: v, src: ls.level, no: ls.no, t: 'cefr' }); });
+    });
+    ieltsList().forEach(function (ls) {
+      (ls.vocab || []).forEach(function (v) { out.push({ v: v, src: 'IELTS', no: ls.no, t: 'ielts' }); });
+    });
+    return out;
+  }
 
   function pagePron(tab) {
     tab = tab || 'vowels';
-    var tabs = [['vowels', 'mic', 'Nguyên âm', 20], ['consonants', 'volume', 'Phụ âm', 24],
-                ['pairs', 'shuffle', 'Cặp âm', PR.minimalPairs.length],
-                ['endings', 'list', 'Đuôi -s / -ed', 6],
-                ['stress', 'chart', 'Trọng âm', 0], ['linking', 'link', 'Nối âm', 0],
-                ['errors', 'info', 'Lỗi hay mắc', PR.commonErrors.length]];
-
-    var h = '<h1>' + ic('mic') + 'Phát âm — Bảng IPA</h1>' +
-      '<p class="muted">Tiếng Anh có 26 chữ cái nhưng <b>44 âm</b>. Bấm vào bất kỳ ô âm nào để nghe các từ ví dụ. ' +
-      'Luyện 15 phút mỗi ngày theo lịch ở cuối trang.</p><div class="chip-row" id="pChips">';
+    var tabs = [
+      ['vowels', 'mic', 'Nguyên âm', 20], ['consonants', 'volume', 'Phụ âm', 24],
+      ['pairs', 'shuffle', 'Cặp âm', PR.minimalPairs.length],
+      ['words', 'bookOpen', 'Đọc từ vựng', allWords().length],
+      ['sentences', 'chat', 'Đọc câu', PR.sentences.reduce(function (a, g) { return a + g.items.length; }, 0)],
+      ['numbers', 'chart', 'Số & ngày tháng', 0], ['spelling', 'type', 'Đánh vần', 0],
+      ['endings', 'list', 'Đuôi -s / -ed', 0], ['stress', 'trophy', 'Trọng âm', 0],
+      ['linking', 'link', 'Nối âm', 0], ['twisters', 'target', 'Luyện lưỡi', PR.twisters.length],
+      ['errors', 'info', 'Lỗi hay mắc', PR.commonErrors.length]
+    ];
+    var h = '<h1>' + ic('mic') + 'Phát âm — Luyện tập</h1>' +
+      '<p class="muted">Tiếng Anh có 26 chữ cái nhưng <b>44 âm</b>. Bấm nút loa để nghe, nút đồng hồ để nghe chậm. ' +
+      'Chọn giọng đọc và tốc độ ở thanh dưới đây, rồi bấm <b>Luyện tự động</b> để máy đọc lần lượt và chừa chỗ cho bạn nhắc lại.</p>' +
+      pronBar() + '<div class="chip-row" id="pChips">';
     tabs.forEach(function (t) {
       h += '<span class="chip' + (tab === t[0] ? ' active' : '') + '" data-p="' + t[0] + '">' +
         ic(t[1], 'ic ic-sm') + t[2] + (t[3] ? ' <span class="muted">' + t[3] + '</span>' : '') + '</span>';
     });
-    h += '</div><div id="pBody"></div>';
-    return h;
+    return h + '</div><div id="pBody"></div>';
   }
 
   function renderPron(tab) {
     var b = $('#pBody'); if (!b) return;
-    var h = '';
+    drillStop();
+    var h = '', drillSel = '.snd', sample = '';
 
-    if (tab === 'vowels') {
-      h = soundGroups(PR.vowels);
-    } else if (tab === 'consonants') {
-      h = soundGroups(PR.consonants);
+    if (tab === 'vowels' || tab === 'consonants') {
+      h = soundGroups(tab === 'vowels' ? PR.vowels : PR.consonants);
+      drillSel = '.snd';
+      sample = tab === 'vowels' ? 'sit. seat. bad. bed' : 'think. this. right. light';
+
     } else if (tab === 'pairs') {
       h = '<div class="card"><h2>' + ic('shuffle') + 'Cặp âm tối thiểu</h2>' +
-        '<p class="muted" style="font-size:.88rem">Hai từ chỉ khác nhau đúng một âm. Đọc to từng cặp 5 lần, ' +
-        'bấm vào cặp để nghe. Đây là bài luyện hiệu quả nhất để sửa âm sai.</p>';
+        '<p class="muted" style="font-size:.88rem">Hai từ chỉ khác nhau đúng một âm — bài luyện hiệu quả nhất để sửa âm sai. ' +
+        'Bấm vào cặp để nghe cả hai, hoặc bấm từng từ để nghe riêng.</p>' +
+        '<div class="btn-row" style="margin-top:0"><button class="btn sm" id="quizBtn">' + ic('clipboard') +
+        'Kiểm tra: nghe và chọn từ đúng</button></div><div id="pairQuiz"></div>';
       PR.minimalPairs.forEach(function (g) {
-        h += '<h3 style="margin-top:18px">' + esc(g.t) + '</h3><div class="pair-row">';
+        h += '<h3 style="margin-top:20px">' + esc(g.t) + '</h3><div class="pair-row">';
         g.pairs.forEach(function (pr) {
-          h += '<button class="pair" onclick="__speak(&#39;' + attr(pr[0] + '. ' + pr[1]) + '&#39;)">' +
-            '<span>' + esc(pr[0]) + '</span><i>—</i><span>' + esc(pr[1]) + '</span></button>';
+          h += '<div class="pair" data-say="' + attr(pr[0] + '. ' + pr[1]) + '">' +
+            '<button class="pw" onclick="__speak(&#39;' + sq(pr[0]) + '&#39;)">' + esc(pr[0]) + '</button>' +
+            '<i>—</i><button class="pw" onclick="__speak(&#39;' + sq(pr[1]) + '&#39;)">' + esc(pr[1]) + '</button>' +
+            '<button class="say" onclick="__speak(&#39;' + sq(pr[0] + '. ' + pr[1]) + '&#39;)">' +
+            ic('volume', 'ic ic-solo') + '</button></div>';
         });
         h += '</div>';
       });
       h += '</div>';
+      drillSel = '.pair';
+      sample = 'sit. seat';
+
+    } else if (tab === 'words') {
+      h = '<div class="card"><h2>' + ic('bookOpen') + 'Luyện đọc từ vựng</h2>' +
+        '<p class="muted" style="font-size:.88rem">Toàn bộ từ vựng của cả hai lộ trình. Lọc theo cấp độ, ' +
+        'gõ để tìm nhanh, hoặc bấm <b>Luyện tự động</b> để nghe lần lượt và đọc theo.</p>' +
+        '<div class="chip-row" id="wChips"><span class="chip active" data-w="all">Tất cả</span>';
+      CUR.levels.forEach(function (lv) { h += '<span class="chip" data-w="' + lv.id + '">' + lv.id + '</span>'; });
+      h += '<span class="chip" data-w="IELTS">IELTS</span></div>' +
+        '<input id="wFind" class="fill-in" style="width:100%;margin-bottom:12px" placeholder="Gõ để lọc từ…">' +
+        '<div id="wList"></div></div>';
+      drillSel = '.wrow';
+      sample = 'pronunciation';
+
+    } else if (tab === 'sentences') {
+      h = '<div class="card"><h2>' + ic('chat') + 'Luyện đọc câu</h2>' +
+        '<p class="muted" style="font-size:.88rem">Nghe mẫu, đọc theo, rồi ghi âm để tự so sánh. ' +
+        'Nút đồng hồ đọc chậm lại để bạn bắt kịp từng âm.</p>' + recBox('She works at a bank and stops at six.') + '</div>';
+      PR.sentences.forEach(function (g) {
+        h += '<section class="card"><h2>' + ic(g.ic) + esc(g.g) + '</h2>' +
+          '<p class="muted" style="font-size:.87rem">' + esc(g.note) + '</p>';
+        g.items.forEach(function (it) {
+          h += '<div class="sent-line" data-say="' + attr(it[0].replace(/\([^)]*\)/g, '')) + '">' +
+            '<span><b>' + md(it[0]) + '</b><small class="muted">' + esc(it[1]) + '</small></span>' +
+            sayBtns(it[0].replace(/\([^)]*\)/g, '')) + '</div>';
+        });
+        h += '</section>';
+      });
+      drillSel = '.sent-line';
+
+    } else if (tab === 'numbers') {
+      h = '<div class="card"><h2>' + ic('chart') + 'Đọc số, ngày tháng và giá tiền</h2>' +
+        '<p class="muted" style="font-size:.88rem">Phần 1 bài nghe IELTS gần như chỉ xoay quanh những thứ này. ' +
+        'Bấm để nghe cách đọc chuẩn.</p></div>';
+      PR.numbers.forEach(function (g) {
+        h += '<section class="card"><h3>' + esc(g.g) + '</h3>' +
+          '<p class="muted" style="font-size:.86rem">' + esc(g.note) + '</p><div class="num-grid">';
+        g.items.forEach(function (it) {
+          h += '<div class="num-item" data-say="' + attr(it[1]) + '">' +
+            '<b>' + esc(it[0]) + '</b><span>' + esc(it[1]) + '</span>' + sayBtns(it[1]) + '</div>';
+        });
+        h += '</div></section>';
+      });
+      drillSel = '.num-item';
+
+    } else if (tab === 'spelling') {
+      var sp = PR.spelling;
+      h = '<div class="card"><h2>' + ic('type') + 'Luyện đánh vần</h2>' +
+        '<p class="muted" style="font-size:.88rem">' + esc(sp.note) + '</p>' +
+        '<h3 style="margin-top:16px">Nhóm chữ cái dễ nhầm</h3><div class="pair-row">';
+      sp.groups.forEach(function (g) {
+        h += '<div class="pair pair-wide" data-say="' + attr(g[0].replace(/ – /g, ', ')) + '">' +
+          '<span><b>' + esc(g[0]) + '</b><small class="muted ipa">' + esc(g[1]) + '</small></span>' +
+          sayBtns(g[0].replace(/ – /g, ', ')) + '</div>';
+      });
+      h += '</div><h3 style="margin-top:20px">Nghe và chép tên riêng</h3>' +
+        '<p class="muted" style="font-size:.86rem">Bấm nghe rồi viết ra giấy, sau đó bấm để hiện đáp án.</p>' +
+        '<div class="wrap-chips">';
+      sp.names.forEach(function (n) {
+        h += '<button class="namechip" data-name="' + attr(n) + '" data-say="' + attr(n.split('').join(', ')) + '">' +
+          ic('volume', 'ic ic-sm') + '<span class="nm">?</span></button>';
+      });
+      h += '</div>' + recBox('S, M, I, T, H') + '</div>';
+      drillSel = '.namechip';
+
     } else if (tab === 'endings') {
       h = '<div class="card"><h2>' + ic('list') + 'Ba cách đọc đuôi -S</h2>' +
         '<p class="muted" style="font-size:.88rem">Áp dụng cho danh từ số nhiều và động từ ngôi thứ ba số ít.</p>' +
-        '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
-        '<th style="width:80px">Đọc là</th><th>Khi âm trước là</th><th>Ví dụ</th></tr></thead><tbody>';
-      PR.endings.s.forEach(function (r) {
-        h += '<tr><td><b class="ipa">' + esc(r.read) + '</b></td><td>' + esc(r.when) + '</td>' +
-          '<td>' + r.words.map(function (w) {
-            return '<button class="wchip" onclick="__speak(&#39;' + attr(w) + '&#39;)">' + esc(w) + '</button>';
-          }).join('') + '</td></tr>';
-      });
-      h += '</tbody></table></div></div>' +
+        endTable(PR.endings.s) + '</div>' +
         '<div class="card"><h2>' + ic('list') + 'Ba cách đọc đuôi -ED</h2>' +
         '<p class="muted" style="font-size:.88rem">Áp dụng cho quá khứ đơn và quá khứ phân từ của động từ có quy tắc.</p>' +
-        '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
-        '<th style="width:80px">Đọc là</th><th>Khi âm trước là</th><th>Ví dụ</th></tr></thead><tbody>';
-      PR.endings.ed.forEach(function (r) {
-        h += '<tr><td><b class="ipa">' + esc(r.read) + '</b></td><td>' + esc(r.when) + '</td>' +
-          '<td>' + r.words.map(function (w) {
-            return '<button class="wchip" onclick="__speak(&#39;' + attr(w) + '&#39;)">' + esc(w) + '</button>';
-          }).join('') + '</td></tr>';
-      });
-      h += '</tbody></table></div>' +
+        endTable(PR.endings.ed) +
         '<div class="note warn">Chỉ <b>/t/</b> và <b>/d/</b> mới tạo thêm âm tiết. ' +
         '<i>Watched</i> chỉ có <b>1</b> âm tiết /wɒtʃt/, không phải “watch-ed”.</div></div>';
+      drillSel = '.wchip';
+
     } else if (tab === 'stress') {
-      h = '<div class="card"><h2>' + ic('chart') + 'Trọng âm theo loại từ</h2>' +
-        '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
-        '<th>Loại từ</th><th>Quy tắc</th><th>Ví dụ</th></tr></thead><tbody>';
-      PR.stress.byType.forEach(function (r) {
-        h += '<tr><td>' + md(r[0]) + '</td><td>' + md(r[1]) + '</td><td>' + md(r[2]) + '</td></tr>';
-      });
-      h += '</tbody></table></div></div>' +
-        '<div class="card"><h2>' + ic('chart') + 'Trọng âm theo hậu tố</h2>' +
-        '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
-        '<th>Hậu tố</th><th>Trọng âm rơi vào</th><th>Ví dụ</th></tr></thead><tbody>';
-      PR.stress.bySuffix.forEach(function (r) {
-        h += '<tr><td><code>' + esc(r[0]) + '</code></td><td>' + md(r[1]) + '</td><td>' + md(r[2]) + '</td></tr>';
-      });
-      h += '</tbody></table></div></div>' +
+      h = '<div class="card"><h2>' + ic('trophy') + 'Trọng âm theo loại từ</h2>' + ref3(PR.stress.byType, ['Loại từ', 'Quy tắc', 'Ví dụ']) + '</div>' +
+        '<div class="card"><h2>' + ic('trophy') + 'Trọng âm theo hậu tố</h2>' + ref3(PR.stress.bySuffix, ['Hậu tố', 'Trọng âm rơi vào', 'Ví dụ']) + '</div>' +
         '<div class="card"><h2>' + ic('route') + 'Họ từ chuyển trọng âm</h2>' +
-        '<p class="muted" style="font-size:.88rem">Cùng một gốc từ nhưng trọng âm dịch chuyển khi đổi loại từ. ' +
-        'Đây là bẫy hay gặp trong bài nghe.</p><ul class="ex-list">';
+        '<p class="muted" style="font-size:.88rem">Cùng gốc từ nhưng trọng âm dịch chuyển khi đổi loại từ — bẫy hay gặp trong bài nghe. Bấm để nghe cả họ.</p>' +
+        '<div class="pair-row">';
       PR.stress.families.forEach(function (f) {
-        h += '<li>' + f.map(function (x) { return md(x); }).join('  →  ') + '</li>';
+        var plain = f.map(function (x) { return x.replace(/\*/g, ''); });
+        h += '<div class="pair pair-wide" data-say="' + attr(plain.join('. ')) + '">' +
+          '<span>' + f.map(function (x) { return md(x); }).join(' → ') + '</span>' + sayBtns(plain.join('. ')) + '</div>';
       });
-      h += '</ul></div>';
+      h += '</div></div>';
+      drillSel = '.pair';
+
     } else if (tab === 'linking') {
       h = '<div class="card"><h2>' + ic('link') + 'Năm hiện tượng biến âm khi nói nhanh</h2>' +
-        '<p class="muted" style="font-size:.88rem">Đây là lý do bạn biết từ đó mà nghe không ra: ' +
-        'người bản xứ không đọc rời từng từ.</p>';
+        '<p class="muted" style="font-size:.88rem">Đây là lý do bạn biết từ đó mà nghe không ra. ' +
+        'Bấm nghe ở tốc độ thường, rồi bấm nghe chậm để thấy rõ từng âm.</p>';
       PR.connected.rules.forEach(function (r) {
         h += '<div class="gr-block"><h3>' + esc(r.t) + '</h3><p>' + esc(r.d) + '</p><div class="pair-row">';
         r.ex.forEach(function (e) {
-          h += '<button class="pair pair-wide" onclick="__speak(&#39;' + attr(e[0]) + '&#39;)">' +
-            '<span>' + md(e[0]) + '</span><i>→</i><span class="ipa">' + md(e[1]) + '</span></button>';
+          var plain = e[0].replace(/\*/g, '');
+          h += '<div class="pair pair-wide" data-say="' + attr(plain) + '">' +
+            '<span><b>' + md(e[0]) + '</b><small class="ipa">' + md(e[1]) + '</small></span>' + sayBtns(plain) + '</div>';
         });
         h += '</div></div>';
       });
       h += '</div><div class="card"><h2>' + ic('volume') + 'Dạng yếu của từ chức năng</h2>' +
-        '<p class="muted" style="font-size:.88rem">Trong câu nói tự nhiên, các từ này gần như luôn đọc ở dạng yếu.</p>' +
         '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
-        '<th>Từ</th><th>Dạng mạnh (đọc rời)</th><th>Dạng yếu (trong câu)</th></tr></thead><tbody>';
+        '<th>Từ</th><th>Dạng mạnh</th><th>Dạng yếu</th></tr></thead><tbody>';
       PR.connected.weakForms.forEach(function (r) {
-        h += '<tr><td><b>' + esc(r[0]) + '</b></td><td class="muted">' + esc(r[1]) + '</td>' +
-          '<td class="ipa">' + esc(r[2]) + '</td></tr>';
+        h += '<tr><td><b>' + esc(r[0]) + '</b></td><td class="muted">' + esc(r[1]) + '</td><td class="ipa">' + esc(r[2]) + '</td></tr>';
       });
       h += '</tbody></table></div></div>' +
-        '<div class="card"><h2>' + ic('chat') + 'Câu đầy đủ nghe thật ra thế nào</h2><ul class="ex-list">';
+        '<div class="card"><h2>' + ic('chat') + 'Câu đầy đủ nghe thật ra thế nào</h2><div class="pair-row">';
       PR.connected.examples.forEach(function (e) {
-        h += '<li><b>' + esc(e[0]) + '</b><br><span class="vi ipa">' + esc(e[1]) + '</span></li>';
+        h += '<div class="pair pair-wide" data-say="' + attr(e[0]) + '">' +
+          '<span><b>' + esc(e[0]) + '</b><small class="ipa">' + esc(e[1]) + '</small></span>' + sayBtns(e[0]) + '</div>';
       });
-      h += '</ul></div>';
+      h += '</div></div>';
+      drillSel = '.pair';
+
+    } else if (tab === 'twisters') {
+      h = '<div class="card"><h2>' + ic('target') + 'Câu luyện lưỡi</h2>' +
+        '<p class="muted" style="font-size:.88rem">Đọc thật chậm lúc đầu để đặt đúng vị trí lưỡi, rồi nhanh dần. ' +
+        'Mỗi câu đọc 5 lần liên tiếp không vấp là đạt.</p>';
+      PR.twisters.forEach(function (t) {
+        h += '<div class="tw" data-say="' + attr(t.s) + '"><div class="tw-main"><b>' + esc(t.s) + '</b>' +
+          '<small class="muted">Âm luyện: <b class="ipa">' + esc(t.f) + '</b> — ' + esc(t.vi) + '</small></div>' +
+          sayBtns(t.s) + '</div>';
+      });
+      h += recBox('She sells shells by the seashore.') + '</div>';
+      drillSel = '.tw';
+
     } else {
       h = '<div class="card"><h2>' + ic('info') + 'Bảy lỗi phát âm người Việt hay mắc</h2>' +
         '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
         '<th>Lỗi</th><th>Ví dụ sai</th><th>Cách sửa</th></tr></thead><tbody>';
       PR.commonErrors.forEach(function (r) {
-        h += '<tr><td><b>' + esc(r[0]) + '</b></td><td class="muted"><i>' + md(r[1]) + '</i></td>' +
-          '<td>' + esc(r[2]) + '</td></tr>';
+        h += '<tr><td><b>' + esc(r[0]) + '</b></td><td class="muted"><i>' + md(r[1]) + '</i></td><td>' + esc(r[2]) + '</td></tr>';
       });
       h += '</tbody></table></div></div>';
     }
 
-    /* Lịch luyện tập — luôn hiện ở cuối */
+    /* lịch luyện — luôn ở cuối */
     h += '<div class="card"><h2>' + ic('clock') + 'Bài luyện 15 phút mỗi ngày</h2>' +
       '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
       '<th style="width:110px">Thời gian</th><th>Việc cần làm</th></tr></thead><tbody>';
     PR.routine.forEach(function (r) {
       h += '<tr><td><b>' + esc(r[0]) + '</b></td><td>' + esc(r[1]) + '</td></tr>';
     });
-    h += '</tbody></table></div>' +
-      '<div class="note tip"><b>Shadowing</b> là kỹ thuật hiệu quả nhất: mở một đoạn 30 giây, ' +
-      'nghe và nói đuổi theo <b>cùng lúc</b>, bắt chước cả ngữ điệu. Làm 10 phút mỗi ngày trong một tháng, ' +
-      'khả năng nghe và độ tự nhiên khi nói sẽ khác hẳn.</div>' +
-      '<div class="btn-row">' +
+    h += '</tbody></table></div><div class="btn-row">' +
       '<button class="btn" onclick="location.hash=\'#/doc/01-phat-am-ipa.md\'">' + ic('folder') + 'Tài liệu phát âm đầy đủ</button>' +
       '<button class="btn" onclick="location.hash=\'#/ielts/lesson/ie-01\'">' + ic('cap') + 'Buổi phát âm trong lộ trình IELTS</button>' +
       '</div></div>';
 
     b.innerHTML = h;
+
+    if (tab === 'vowels' || tab === 'consonants') wireSounds();
+    if (tab === 'words') wireWordList();
+    if (tab === 'pairs') wirePairQuiz();
+    if (tab === 'spelling') {
+      $$('.namechip').forEach(function (n) {
+        n.onclick = function () {
+          say(n.dataset.say);
+          $('.nm', n).textContent = n.dataset.name;
+        };
+      });
+    }
+    var rb = $('#recBtn'); if (rb) rb.onclick = recToggle;
+    wireBar(drillSel);
+  }
+
+  function endTable(rows) {
+    var h = '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
+      '<th style="width:82px">Đọc là</th><th>Khi âm trước là</th><th>Ví dụ — bấm để nghe</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      h += '<tr><td><b class="ipa">' + esc(r.read) + '</b></td><td>' + esc(r.when) + '</td><td>' +
+        r.words.map(function (w) {
+          return '<button class="wchip" data-say="' + attr(w) + '" onclick="__speak(&#39;' + sq(w) + '&#39;)">' + esc(w) + '</button>';
+        }).join('') + '</td></tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+  function ref3(rows, head) {
+    var h = '<div class="table-scroll"><table class="ref-table"><thead><tr>' +
+      head.map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      h += '<tr>' + r.map(function (c) { return '<td>' + md(c) + '</td>'; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  function wireWordList() {
+    var filter = 'all', q = '';
+    function render() {
+      var rows = allWords().filter(function (r) {
+        if (filter !== 'all' && r.src !== filter) return false;
+        if (!q) return true;
+        return (r.v.w + ' ' + (r.v.vi || '')).toLowerCase().indexOf(q) > -1;
+      });
+      var h = '<div class="muted" style="font-size:.84rem;margin-bottom:8px">' + rows.length + ' từ</div>';
+      rows.slice(0, 400).forEach(function (r) {
+        h += '<div class="wrow" data-say="' + attr(r.v.w) + '">' +
+          '<span class="wrow-main"><b>' + esc(r.v.w) + '</b> <span class="ipa">' + esc(r.v.ipa || '') + '</span>' +
+          '<small class="muted">' + esc(r.v.vi) + '</small></span>' +
+          '<span class="wrow-tag tag ' + (r.t === 'ielts' ? 'ie' : r.src.toLowerCase()) + '">' + esc(r.src) + '</span>' +
+          sayBtns(r.v.w) + '</div>';
+      });
+      if (rows.length > 400) h += '<p class="muted" style="font-size:.84rem;margin-top:10px">' +
+        'Đang hiện 400 từ đầu. Gõ vào ô tìm kiếm để thu hẹp danh sách.</p>';
+      $('#wList').innerHTML = h;
+    }
+    $$('#wChips .chip').forEach(function (ch) {
+      ch.onclick = function () {
+        $$('#wChips .chip').forEach(function (x) { x.classList.remove('active'); });
+        ch.classList.add('active'); filter = ch.dataset.w; render();
+      };
+    });
+    var f = $('#wFind');
+    f.oninput = function () { q = f.value.trim().toLowerCase(); render(); };
+    render();
+  }
+
+  function wirePairQuiz() {
+    var btn = $('#quizBtn'); if (!btn) return;
+    btn.onclick = function () {
+      var pool = [];
+      PR.minimalPairs.forEach(function (g) {
+        g.pairs.forEach(function (pr) { pool.push({ pair: pr, t: g.t }); });
+      });
+      for (var i = pool.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1)), t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+      }
+      var qs = pool.slice(0, 10).map(function (x) {
+        return { which: Math.random() < 0.5 ? 0 : 1, pair: x.pair, t: x.t };
+      });
+      var h = '<div class="card quiz-card"><h3>' + ic('clipboard') + 'Nghe và chọn từ bạn nghe được</h3>' +
+        '<p class="muted" style="font-size:.86rem">10 câu. Bấm loa để nghe, rồi chọn từ đúng.</p>';
+      qs.forEach(function (q, i) {
+        h += '<div class="q qz" data-i="' + i + '"><div class="q-title"><span class="n">' + (i + 1) + '</span>' +
+          '<button class="btn sm" onclick="__speak(&#39;' + sq(q.pair[q.which]) + '&#39;)">' +
+          ic('volume') + 'Nghe</button> <span class="muted" style="font-size:.82rem">' + esc(q.t) + '</span></div>' +
+          '<div class="opts opts-row">' +
+          '<div class="opt" data-j="0">' + esc(q.pair[0]) + '</div>' +
+          '<div class="opt" data-j="1">' + esc(q.pair[1]) + '</div></div></div>';
+      });
+      h += '<div class="btn-row"><button class="btn primary" id="qzCheck">' + ic('check') + 'Kiểm tra</button></div>' +
+        '<div class="score-box" id="qzScore"></div></div>';
+      $('#pairQuiz').innerHTML = h;
+      $$('#pairQuiz .opt').forEach(function (o) {
+        o.onclick = function () {
+          $$('.opt', o.parentNode).forEach(function (x) { x.classList.remove('sel'); });
+          o.classList.add('sel');
+        };
+      });
+      $('#qzCheck').onclick = function () {
+        var right = 0;
+        $$('#pairQuiz .qz').forEach(function (qn, i) {
+          var sel = $('.opt.sel', qn), w = qs[i].which;
+          $$('.opt', qn).forEach(function (o, j) {
+            o.classList.remove('correct', 'wrong');
+            if (j === w) o.classList.add('correct');
+            else if (sel === o) o.classList.add('wrong');
+          });
+          if (sel && +sel.dataset.j === w) right++;
+        });
+        var box = $('#qzScore');
+        box.className = 'score-box show';
+        box.innerHTML = ic(right >= 8 ? 'trophy' : right >= 5 ? 'thumb' : 'info') +
+          'Kết quả: <b>' + right + '/10</b> — ' +
+          (right >= 8 ? 'Tai bạn phân biệt tốt rồi.'
+            : right >= 5 ? 'Khá ổn. Luyện lại những cặp vừa chọn sai.'
+              : 'Hãy quay lại luyện đọc to từng cặp trước khi kiểm tra tiếp.');
+      };
+      $('#pairQuiz').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
   }
 
   /* ================= LỘ TRÌNH IELTS ================= */

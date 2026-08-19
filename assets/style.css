@@ -570,6 +570,172 @@ h1 .ic,h2 .ic,h3 .ic{color:var(--brand)}
   .pair{padding:8px 12px; font-size:.84rem}
 }
 
+/* ---- thanh điều khiển phát âm ---- */
+.pron-bar{
+  display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center;
+  background:var(--panel); border:1.5px solid var(--line-strong); border-radius:var(--r-m);
+  padding:13px 16px; margin:14px 0 4px; box-shadow:var(--sh-hard);
+}
+.pb-group{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+.pb-drill{margin-left:auto}
+.pb-lab{font-size:.78rem; font-weight:700; color:var(--muted); white-space:nowrap}
+.pb-sel{
+  padding:8px 10px; border-radius:9px; border:1.5px solid var(--line-strong);
+  background:var(--panel-2); color:var(--text); font-family:inherit; font-size:.83rem;
+  max-width:280px; min-width:190px; flex:1; cursor:pointer;
+}
+.pb-rates{display:flex; gap:4px}
+.pb-rate{
+  padding:6px 11px; border-radius:99px; border:1.5px solid var(--line-strong);
+  background:var(--panel-2); color:var(--text-2); font-family:inherit;
+  font-size:.78rem; font-weight:700; cursor:pointer;
+}
+.pb-rate:hover{border-color:var(--brand)}
+.pb-rate.active{background:var(--brand); border-color:var(--brand); color:#fff}
+.pb-check{display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted); cursor:pointer}
+.pb-voice{flex:1 1 100%; align-items:center}
+.pb-hint{font-size:.76rem; color:var(--brand); font-weight:650; margin-left:auto}
+.pb-sel optgroup{font-weight:800; color:var(--muted)}
+.pb-sel option{font-weight:500; color:var(--text)}
+.voice-tip{
+  margin-top:10px; font-size:.83rem; color:var(--text-2);
+  background:var(--panel-2); border-left:4px solid var(--brand);
+  padding:10px 14px; border-radius:0 var(--r-s) var(--r-s) 0;
+}
+.voice-tip b{color:var(--text)}
+.voice-tip code{font-size:.85em}
+.pb-check input{accent-color:var(--brand)}
+
+/* ---- nút nghe ---- */
+.say-btns{display:inline-flex; gap:3px; flex-shrink:0}
+.say{
+  border:1px solid transparent; background:none; cursor:pointer; padding:5px;
+  border-radius:8px; color:var(--brand); opacity:.6; line-height:0;
+  transition:opacity .13s, background .13s, border-color .13s;
+}
+.say:hover{opacity:1; background:var(--brand-soft); border-color:var(--line)}
+.say-slow{color:var(--purple)}
+.say svg{width:17px;height:17px}
+
+/* ---- thẻ âm ---- */
+.snd-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:11px; margin-top:14px}
+.snd{
+  border:1.5px solid var(--line-strong); border-radius:var(--r-m); padding:13px 14px;
+  background:var(--panel); transition:border-color .14s, box-shadow .14s;
+}
+.snd:hover{border-color:var(--brand); box-shadow:var(--sh-hard)}
+.snd.open{grid-column:1/-1; border-color:var(--brand)}
+.snd-top{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px}
+.snd-ipa{font-size:1.32rem; font-weight:800; color:var(--purple); letter-spacing:-.01em}
+.snd-words{font-size:.9rem; font-weight:650; margin-bottom:5px}
+.snd-vi{font-size:.79rem; color:var(--muted); line-height:1.5}
+.snd-more{
+  margin-top:10px; padding:5px 0 0; border:none; background:none; cursor:pointer;
+  color:var(--brand); font-family:inherit; font-size:.78rem; font-weight:700;
+  display:inline-flex; align-items:center;
+}
+.snd-more .ic{transition:transform .2s}
+.snd.open .snd-more .ic{transform:rotate(90deg)}
+.snd-hard{border-color:var(--red); background:var(--red-soft)}
+.snd-hard .snd-ipa{color:var(--red)}
+.snd-star{border-color:var(--amber); background:var(--amber-soft)}
+.snd-star .snd-ipa{color:var(--amber)}
+.drill-active{outline:3px solid var(--brand); outline-offset:2px}
+
+.sd{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line-strong)}
+.sd-row{margin-bottom:12px}
+.sd-row:last-child{margin-bottom:0}
+.sd-row>b{display:flex; align-items:center; font-size:.79rem; color:var(--brand);
+  text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px}
+.sd-row p{margin:0; font-size:.87rem; line-height:1.6}
+.sd-err>b{color:var(--red)}
+.wrap-chips{display:flex; flex-wrap:wrap; gap:6px}
+
+/* ---- dòng câu, cặp từ, số ---- */
+.sent-line{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  padding:11px 12px; border:1.5px solid var(--line-strong); border-radius:var(--r-m);
+  margin-bottom:8px; background:var(--panel);
+}
+.sent-line span{min-width:0}
+.sent-line small{display:block; color:var(--muted); font-size:.83rem; margin-top:3px}
+.pair-row{display:flex; flex-wrap:wrap; gap:9px; margin:10px 0 4px}
+.pair{
+  display:inline-flex; align-items:center; gap:7px; padding:8px 12px; min-height:42px;
+  border:1.5px solid var(--line-strong); border-radius:99px; background:var(--panel);
+}
+.pair-wide{border-radius:var(--r-m); align-items:flex-start}
+.pair-wide small{display:block; font-size:.8rem; margin-top:3px}
+.pair i{color:var(--muted); font-style:normal; font-size:.8rem}
+.pw{
+  border:none; background:none; cursor:pointer; font-family:inherit;
+  font-size:.88rem; font-weight:700; color:var(--text); padding:3px 6px; border-radius:7px;
+}
+.pw:hover{background:var(--brand-soft); color:var(--brand)}
+.wchip{
+  display:inline-block; margin:2px 4px 2px 0; padding:5px 11px; border-radius:99px;
+  border:1px solid var(--line-strong); background:var(--panel-2); color:var(--text);
+  font-family:inherit; font-size:.83rem; cursor:pointer;
+}
+.wchip:hover{border-color:var(--brand); background:var(--brand-soft)}
+.num-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:9px; margin-top:10px}
+.num-item{
+  display:flex; align-items:center; gap:9px; padding:9px 12px;
+  border:1.5px solid var(--line-strong); border-radius:var(--r-m); background:var(--panel);
+}
+.num-item b{font-size:.95rem; min-width:64px; flex-shrink:0}
+.num-item span{font-size:.83rem; color:var(--muted); flex:1; min-width:0}
+.namechip{
+  display:inline-flex; align-items:center; gap:5px; padding:8px 13px; min-height:40px;
+  border:1.5px solid var(--line-strong); border-radius:99px; background:var(--panel);
+  color:var(--brand); font-family:inherit; font-size:.85rem; font-weight:700; cursor:pointer;
+}
+.namechip:hover{border-color:var(--brand)}
+.namechip .nm{color:var(--text); letter-spacing:.06em}
+.tw{
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  padding:13px 14px; border:1.5px solid var(--line-strong); border-radius:var(--r-m);
+  margin-bottom:9px; background:var(--panel);
+}
+.tw-main b{font-size:1rem}
+.tw-main small{display:block; margin-top:4px; font-size:.81rem}
+
+/* ---- danh sách từ vựng ---- */
+.wrow{
+  display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border:1px solid var(--line); border-radius:var(--r-s); margin-bottom:6px; background:var(--panel);
+}
+.wrow:hover{border-color:var(--brand)}
+.wrow-main{flex:1; min-width:0}
+.wrow-main b{font-size:.95rem}
+.wrow-main small{display:block; color:var(--muted); font-size:.82rem}
+.wrow-tag{font-size:.65rem; flex-shrink:0}
+
+/* ---- ghi âm ---- */
+.rec-box{
+  border:1.5px dashed var(--brand); border-radius:var(--r-m);
+  padding:14px 16px; background:var(--brand-soft); margin-top:14px;
+}
+.rec-head{display:flex; align-items:center; font-size:.9rem; color:var(--brand)}
+.rec-out{margin-top:11px; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.rec-out audio{height:38px; max-width:100%}
+.rec-on{background:var(--red) !important; border-color:var(--red) !important; color:#fff !important}
+.opts-row{flex-direction:row; gap:9px}
+.opts-row .opt{flex:1; text-align:center; font-weight:700}
+.quiz-card{border-color:var(--brand)}
+
+@media (max-width:900px){
+  .pron-bar{padding:11px 12px; gap:11px 14px}
+  .pb-drill{margin-left:0; width:100%}
+  .pb-sel{max-width:100%; flex:1}
+  .snd-grid{grid-template-columns:repeat(auto-fill,minmax(152px,1fr)); gap:9px}
+  .snd{padding:11px 12px}
+  .snd-ipa{font-size:1.15rem}
+  .num-grid{grid-template-columns:1fr}
+  .sent-line,.tw{flex-direction:column; gap:8px}
+  .pair{padding:7px 11px}
+}
+
 /* ================= LỘ TRÌNH IELTS ================= */
 :root{ --ielts:#0d9488; --ielts-soft:#d7f2ee; }
 :root[data-theme="dark"]{ --ielts:#2dd4bf; --ielts-soft:#0c2a28; }
